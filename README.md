@@ -22,6 +22,7 @@ cp .env.example .env
 
 ### Fill .env variable
 VITE_SERVER_PORT=
+
 VITE_BEARER_TOKEN=
 
 ### Install Dependecies
