@@ -17,6 +17,16 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 ## Project Setup
 
 ```sh
+cp .env.example .env
+```
+
+### Fill .env variable
+VITE_SERVER_PORT=
+VITE_BEARER_TOKEN=
+
+### Install Dependecies
+
+```sh
 npm install
 ```
 
