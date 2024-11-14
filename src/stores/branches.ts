@@ -59,18 +59,13 @@ export const useBranchStore = defineStore('branchStore', () => {
     }
   }
 
-  async function updateBranch(branchId: string, updates: Partial<Branch>) {
-    try {
-      await apiClient.put(`branches/${branchId}`, updates);
+  const updateBranch = async (branchId: string, updates: Partial<Branch>) => {
+      const response = await apiClient.put(`branches/${branchId}`, updates);
       const index = branches.value.findIndex(branch => branch.id === branchId);
       if (index !== -1) {
         branches.value[index] = { ...branches.value[index], ...updates };
       }
-      error.value = null;
-    } catch (err) {
-      console.error('Error updating branch:', err);
-      error.value = 'Failed to update branch. Please try again later.';
-    }
+      return response
   }
 
   async function enableReservation(branchId: string) {

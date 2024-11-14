@@ -28,15 +28,20 @@
       <label class="block text-sm font-medium mb-1">Tables</label>
       <div class="border border-gray-300 rounded p-2 flex flex-wrap gap-2 mb-4">
         <span
-          v-if="data_branchData.sections[0]"
+          v-if="
+            data_branchData.sections &&
+            data_branchData.sections.length > 0 &&
+            data_branchData.sections[0].tables
+          "
           v-for="table in data_branchData.sections[0].tables"
           :key="table.id"
           class="px-2 py-1 bg-blue-100 text-blue-700 rounded"
         >
-          {{ table.section }} - {{ table.name }}
+          {{ data_branchData.name }} - {{ table.name }}
         </span>
       </div>
 
+      <!-- Time Slot Component for Each Day -->
       <TimeSlot
         v-for="day in daysOfWeek"
         :key="day"
@@ -46,14 +51,36 @@
         @applyToAllDays="applyToAllDays"
       />
 
+      <!-- Messages and Errors -->
+      <p
+        v-if="data_error"
+        class="bg-red-100 text-red-700 p-2 rounded my-4 text-sm"
+      >
+        {{ data_error }}
+      </p>
+      <p
+        v-if="data_message"
+        class="bg-green-100 text-green-700 p-2 rounded my-4 text-sm"
+      >
+        {{ data_message }}
+      </p>
+
       <!-- Footer Buttons -->
       <div class="flex justify-between items-center mt-6">
-        <button @click="disableReservations" class="text-red-500">
-          Disable Reservations
+        <button
+          @click="toggleReservations"
+          class="text-red-500"
+          :disabled="data_loading"
+        >
+          {{
+            data_branchData.accepts_reservations
+              ? "Disable Reservations"
+              : "Enable Reservations"
+          }}
         </button>
         <div>
           <button
-            @click="close"
+            @click="closeModal"
             class="mr-2 border border-gray-300 rounded px-4 py-2"
           >
             Close
@@ -61,8 +88,9 @@
           <button
             @click="save"
             class="bg-purple-700 text-white rounded px-4 py-2"
+            :disabled="data_loading || !data_branchData.accepts_reservations"
           >
-            Save
+            {{ data_loading ? "Saving..." : "Save" }}
           </button>
         </div>
       </div>
@@ -72,80 +100,126 @@
 
 <script setup>
 import TimeSlot from "@/components/TimeSlot.vue";
-import { ref, reactive, toRefs, watch } from "vue";
+import { ref, toRaw, watch } from "vue";
+import { storeToRefs } from "pinia";
+import { useBranchStore } from "@/stores/branches";
 
-// Props
+/** Store setup */
+const branchStore = useBranchStore();
+const { error } = storeToRefs(branchStore);
+
+// Props and Events
 const props = defineProps({
   isOpen: Boolean,
   branchData: {
     type: Object,
     required: true,
-    default: () => {},
+    default: () => ({}),
   },
 });
 const emit = defineEmits(["close", "save", "disable"]);
 
-const data_branchData = ref(props.brachData);
+const data_branchData = ref({ ...props.branchData });
 const data_isOpen = ref(props.isOpen);
+const data_error = ref("");
+const data_message = ref("");
+const data_loading = ref(false);
 
 const daysOfWeek = [
-  "Saturday",
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
+  "saturday",
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
 ];
 
-// Initial time slots for each day
-const timeSlots = reactive({
-  Saturday: [],
-  Sunday: [],
-  Monday: [],
-  Tuesday: [],
-  Wednesday: [],
-  Thursday: [],
-  Friday: [],
-});
+// Reactive time slots from branchData
+const timeSlots = ref({ ...data_branchData.value?.reservation_times });
 
+// Watchers to handle prop updates
 watch(
   () => props.isOpen,
-  (value) => {
-    data_isOpen.value = value;
-  },
-  { immediate: true, deep: true }
+  (value) => (data_isOpen.value = value),
+  { immediate: true }
 );
 
 watch(
   () => props.branchData,
   (value) => {
     data_branchData.value = value;
+    timeSlots.value = value.reservation_times || {};
   },
   { immediate: true, deep: true }
 );
 
-// Methods
-function close() {
-  emit("close");
+// Utility Functions
+function resetMessages() {
+  data_error.value = "";
+  data_message.value = "";
 }
 
+function handleSuccess(message) {
+  data_message.value = message;
+  setTimeout(closeModal, 3000);
+}
+
+function handleError(err) {
+  data_error.value = err.response?.data?.message || "An error occurred";
+}
+
+// Close Modal
+function closeModal() {
+  data_isOpen.value = false;
+  resetMessages();
+  emit("close", data_isOpen.value);
+}
+
+// Save Reservations
 function save() {
-  const dataToUpdate = { ...data_branchData.value };
-  console.log(dataToUpdate);
-  emit("save", dataToUpdate);
+  data_loading.value = true;
+  resetMessages();
+
+  const formattedTimeSlots = Object.fromEntries(
+    Object.entries(toRaw(timeSlots.value)).map(([day, slots]) => [
+      day,
+      Array.isArray(slots) ? slots.map((slot) => [slot.start, slot.end]) : [],
+    ])
+  );
+
+  const dataToUpdate = {
+    reservation_duration: data_branchData.value.reservation_duration,
+    reservation_times: formattedTimeSlots,
+  };
+
+  branchStore
+    .updateBranch(data_branchData.value.id, dataToUpdate)
+    .then(() => handleSuccess("Update successful!"))
+    .catch(handleError)
+    .finally(() => (data_loading.value = false));
 }
 
-function disableReservations() {
-  emit("disable");
+// Enable or Disable Reservations
+function toggleReservations() {
+  data_loading.value = true;
+  resetMessages();
+
+  const action = data_branchData.value.accepts_reservations
+    ? branchStore.disableReservation
+    : branchStore.enableReservation;
+  action(data_branchData.value.id)
+    .then(() => handleSuccess("Reservation status updated!"))
+    .catch(handleError)
+    .finally(() => (data_loading.value = false));
 }
 
-// Update time slots when a slot is added or removed
+// Update Time Slots
 function updateTimeSlots(updatedSlots) {
   Object.assign(timeSlots, updatedSlots);
 }
 
-// Apply time slots from one day to all days
+// Apply Time Slots to All Days
 function applyToAllDays({ day, slots }) {
   daysOfWeek.forEach((d) => {
     if (d !== day) {

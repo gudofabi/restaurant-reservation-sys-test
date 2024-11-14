@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { reactive, toRefs, computed } from "vue";
+import { reactive, ref, watchEffect } from "vue";
 import { defineProps, defineEmits } from "vue";
 
 const props = defineProps({
@@ -71,8 +71,8 @@ const props = defineProps({
 
 const emit = defineEmits(["update", "applyToAllDays"]);
 
-// Reactive state for time slots
-const timeSlots = reactive({ ...props.initialTimeSlots });
+// Initialize timeSlots as an array of { start, end } objects
+const timeSlots = reactive(props.initialTimeSlots);
 
 // Method to add a time slot, up to a limit of 3 slots
 function addTimeSlot(day) {
